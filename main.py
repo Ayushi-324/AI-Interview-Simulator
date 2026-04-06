@@ -5,12 +5,13 @@ from pydantic import BaseModel
 import google.generativeai as genai
 import json
 import re
+import os
 
 # Database imports
 from database import SessionLocal, SessionModel, EvaluationModel
 
 # API setup
-genai.configure(api_key="AIzaSyAAtupEwzxGzEtLj6RAQeL5Kx2LcolMTSo")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
 app = FastAPI()
