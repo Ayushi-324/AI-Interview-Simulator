@@ -13,7 +13,7 @@ import os
 # Database imports
 from database import SessionLocal, SessionModel, EvaluationModel
 
-# Groq setup
+# Groq client
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI()
@@ -25,6 +25,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------- MODELS ----------------
+
 class RoleRequest(BaseModel):
     role: str
 
@@ -33,72 +35,88 @@ class AnswerRequest(BaseModel):
     question: str
     answer: str
 
-def parse_json_response(text: str) -> dict:
+
+# ---------------- HELPERS ----------------
+
+def parse_json_response(text: str):
     cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
     return json.loads(cleaned)
 
+
+# ---------------- HOME ----------------
+
 @app.get("/")
-def read_index():
+def home():
     return FileResponse("index.html")
 
-# -------------------------------
-# GENERATE QUESTIONS
-# -------------------------------
+
+# ---------------- GENERATE QUESTIONS ----------------
+
 @app.post("/generate-questions")
 def generate_questions(req: RoleRequest):
     try:
-        print("Step 1: received role:", req.role)
+        print("Step 1: role received:", req.role)
 
         prompt = f"""
-        Generate exactly 5 interview questions for a {req.role} role.
-        Return only the questions as a plain numbered list.
-        """
+Generate exactly 5 interview questions for a {req.role} role.
+Return only questions, one per line.
+"""
 
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
         )
 
-        text = response.choices[0].message.content
-        print("Step 3: response:", text)
+        if not response.choices:
+            raise Exception("Empty response from Groq")
 
-        if not text:
-            return {"session_id": None, "questions": ["Error generating questions"]}
+        text = response.choices[0].message.content.strip()
 
-        raw_lines = text.strip().split("\n")
+        print("Step 3: raw response:", text)
 
         questions = [
-            re.sub(r"^\d+[\.\)]\s*", "", line).strip()
-            for line in raw_lines if line.strip()
-        ]
+            re.sub(r"^\d+[\.\)]\s*", "", q).strip()
+            for q in text.split("\n")
+            if q.strip()
+        ][:5]
 
         print("Step 4: parsed questions:", questions)
 
         # Save session
         db = SessionLocal()
         session_id = str(db.query(SessionModel).count() + 1)
-        new_session = SessionModel(session_id=session_id, role=req.role)
+
+        new_session = SessionModel(
+            session_id=session_id,
+            role=req.role
+        )
+
         db.add(new_session)
         db.commit()
         db.close()
 
-        return {"session_id": session_id, "questions": questions[:5]}
+        return {
+            "session_id": session_id,
+            "questions": questions
+        }
 
     except Exception as e:
-        print("ERROR:", str(e))
-        return {"session_id": None, "questions": ["Server error"]}
+        print("ERROR generate-questions:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-# -------------------------------
-# EVALUATE ANSWER
-# -------------------------------
+
+# ---------------- EVALUATE ANSWER ----------------
+
 @app.post("/evaluate")
 def evaluate(req: AnswerRequest):
     try:
-        print("Step 1: evaluating session:", req.session_id)
+        print("Step 1: evaluating:", req.session_id)
 
         db = SessionLocal()
+
         session = db.query(SessionModel).filter(
             SessionModel.session_id == req.session_id
         ).first()
@@ -108,40 +126,42 @@ def evaluate(req: AnswerRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         prompt = f"""
-        You are a technical interviewer. Evaluate the following answer.
+You are a strict technical interviewer.
 
-        Question: {req.question}
-        Answer: {req.answer}
+Question: {req.question}
+Answer: {req.answer}
 
-        Return a JSON object with exactly these fields:
-        {{
-            "score": <integer from 1 to 10>,
-            "feedback": "<2-3 sentence constructive feedback>",
-            "weakness": "<short 3-5 word phrase or 'none'>"
-        }}
-        Return only JSON.
-        """
+Return ONLY valid JSON:
+{{
+  "score": 0-10,
+  "feedback": "2-3 lines",
+  "weakness": "short phrase"
+}}
+"""
 
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
         )
 
-        text = response.choices[0].message.content
-        print("Step 3: response:", text)
+        if not response.choices:
+            raise Exception("Empty evaluation response")
+
+        text = response.choices[0].message.content.strip()
+
+        print("Step 3 raw:", text)
 
         try:
             result = parse_json_response(text)
         except:
             result = {
                 "score": 5,
-                "feedback": "Could not parse response",
-                "weakness": "unclear"
+                "feedback": text,
+                "weakness": "parsing error"
             }
-
-        print("Step 4: parsed result:", result)
 
         weakness = result.get("weakness", "none")
 
@@ -150,7 +170,7 @@ def evaluate(req: AnswerRequest):
             question=req.question,
             score=result["score"],
             feedback=result["feedback"],
-            weakness=weakness if weakness.lower() != "none" else None
+            weakness=None if weakness.lower() == "none" else weakness
         )
 
         db.add(new_eval)
@@ -162,16 +182,16 @@ def evaluate(req: AnswerRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print("ERROR:", str(e))
-        return {"score": 0, "feedback": "Server error", "weakness": "error"}
+        print("ERROR evaluate:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-# -------------------------------
-# REPORT GENERATION
-# -------------------------------
+
+# ---------------- REPORT ----------------
+
 @app.get("/get-report/{session_id}")
 def report(session_id: str):
     try:
-        print("Step 1: generating report:", session_id)
+        print("Step 1: report:", session_id)
 
         db = SessionLocal()
 
@@ -186,6 +206,7 @@ def report(session_id: str):
         evaluations = db.query(EvaluationModel).filter(
             EvaluationModel.session_id == session_id
         ).all()
+
         db.close()
 
         if not evaluations:
@@ -194,45 +215,43 @@ def report(session_id: str):
                 "role": session.role,
                 "average_score": None,
                 "weakness_summary": [],
-                "recommendation": "No answers evaluated yet."
+                "recommendation": "No evaluations yet."
             }
 
-        avg_score = round(sum(e.score for e in evaluations) / len(evaluations), 1)
+        avg_score = round(
+            sum(e.score for e in evaluations) / len(evaluations), 1
+        )
+
         weaknesses = [e.weakness for e in evaluations if e.weakness]
 
-        synthesis_prompt = f"""
-        Candidate role: {session.role}
-        Weaknesses: {weaknesses if weaknesses else ["none"]}
-        Average score: {avg_score}/10
+        prompt = f"""
+Role: {session.role}
+Weaknesses: {weaknesses}
+Average score: {avg_score}
 
-        Write a short hiring recommendation (2-3 sentences).
-        """
+Give 2-3 sentence hiring recommendation.
+"""
 
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": synthesis_prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
         )
 
-        recommendation = response.choices[0].message.content
+        recommendation = response.choices[0].message.content.strip()
 
         return {
             "session_id": session_id,
             "role": session.role,
             "average_score": avg_score,
             "weakness_summary": list(set(weaknesses)),
-            "recommendation": recommendation.strip()
+            "recommendation": recommendation
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print("ERROR:", str(e))
-        return {
-            "session_id": session_id,
-            "role": None,
-            "average_score": None,
-            "weakness_summary": [],
-            "recommendation": "Error generating report"
-        }
+        print("ERROR report:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))

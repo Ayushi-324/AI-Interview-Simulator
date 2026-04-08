@@ -1,110 +1,251 @@
-from groq import Groq
-import json
-import os
+from dotenv import load_dotenv
+load_dotenv()
 
-# Configure API key
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from groq import Groq
+
+import os
+import json
+import re
+
+# DB
+from database import SessionLocal, SessionModel, EvaluationModel
+
+# ---------------- INIT ----------------
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Storing weaknesses globally
-weakness_list = []
+
+# ---------------- REQUEST MODELS ----------------
+
+class RoleRequest(BaseModel):
+    role: str
 
 
-def generate_questions(role):
-    prompt = f"""
-    You are a technical interviewer.
+class AnswerRequest(BaseModel):
+    session_id: str
+    question: str
+    answer: str
 
-    Generate EXACTLY 5 interview questions for a {role} role.
 
-    Rules:
-    - Only return questions
-    - One question per line
-    - No numbering
-    - No explanations
+# ---------------- UTIL ----------------
+
+def safe_json_parse(text: str):
     """
-
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    text = response.choices[0].message.content.strip()
-    questions = text.split("\n")
-
-    return [q.strip() for q in questions if q.strip()]
-
-
-def evaluate_answer(question, answer):
-    prompt = f"""
-    You are a strict interviewer.
-
-    Question: {question}
-    Candidate Answer: {answer}
-
-    Evaluate based on:
-    - correctness
-    - depth
-    - clarity
-
-    Return ONLY valid JSON in this format:
-    {{
-        "score": number(0-10),
-        "feedback": "text",
-        "weakness": "short phrase"
-    }}
+    Extract JSON even if LLM returns extra text.
     """
-
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    text = response.choices[0].message.content.strip()
-
     try:
-        result = json.loads(text)
-    except Exception:
-        result = {
-            "score": 5,
-            "feedback": "Could not parse response properly.",
-            "weakness": "parsing error"
+        return json.loads(text)
+    except:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except:
+                pass
+
+    return None
+
+
+# ---------------- ROUTES ----------------
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
+
+# ---------------- GENERATE QUESTIONS ----------------
+
+@app.post("/generate-questions")
+def generate_questions(req: RoleRequest):
+    try:
+        if not req.role:
+            raise HTTPException(status_code=400, detail="Role is required")
+
+        prompt = f"""
+You are a senior technical interviewer.
+
+Generate exactly 5 interview questions for a {req.role} role.
+
+Rules:
+- Only questions
+- No numbering
+- One per line
+"""
+
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+
+        text = response.choices[0].message.content.strip()
+
+        if not text:
+            raise HTTPException(status_code=500, detail="Empty model response")
+
+        questions = [
+            re.sub(r"^\d+[\.\)]\s*", "", q).strip()
+            for q in text.split("\n")
+            if q.strip()
+        ][:5]
+
+        # DB session create
+        db = SessionLocal()
+        session_id = str(db.query(SessionModel).count() + 1)
+
+        session = SessionModel(
+            session_id=session_id,
+            role=req.role
+        )
+
+        db.add(session)
+        db.commit()
+        db.close()
+
+        return {
+            "session_id": session_id,
+            "questions": questions
         }
 
-    weakness_list.append(result["weakness"])
-    return result
+    except Exception as e:
+        print("ERROR generate-questions:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-def main():
-    role = input("Enter role: ")
+# ---------------- EVALUATE ----------------
 
-    questions = generate_questions(role)
+@app.post("/evaluate")
+def evaluate(req: AnswerRequest):
+    try:
+        db = SessionLocal()
 
-    print("\n--- Interview Questions ---\n")
+        session = db.query(SessionModel).filter(
+            SessionModel.session_id == req.session_id
+        ).first()
 
-    for q in questions:
-        print(q)
-        answer = input("Your answer: ")
+        if not session:
+            db.close()
+            raise HTTPException(status_code=404, detail="Session not found")
 
-        result = evaluate_answer(q, answer)
+        prompt = f"""
+You are a strict technical interviewer.
 
-        print("\nEvaluation:")
-        print(f"Score: {result['score']}/10")
-        print(f"Feedback: {result['feedback']}")
-        print(f"Weakness Identified: {result['weakness']}")
-        print("\n--------------------------\n")
+Question: {req.question}
+Answer: {req.answer}
 
-    # Final Report
-    print("\n=== FINAL REPORT ===")
+Return ONLY valid JSON:
+{{
+  "score": 0-10,
+  "feedback": "2-3 lines",
+  "weakness": "short phrase"
+}}
+"""
 
-    unique_weaknesses = list(set(weakness_list))
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5
+        )
 
-    print("Your Weak Areas:")
-    for w in unique_weaknesses:
-        print("-", w)
+        text = response.choices[0].message.content.strip()
+
+        result = safe_json_parse(text)
+
+        if not result:
+            result = {
+                "score": 5,
+                "feedback": "Failed to parse model response",
+                "weakness": "parsing error"
+            }
+
+        new_eval = EvaluationModel(
+            session_id=req.session_id,
+            question=req.question,
+            score=result.get("score", 5),
+            feedback=result.get("feedback", ""),
+            weakness=result.get("weakness", "none")
+        )
+
+        db.add(new_eval)
+        db.commit()
+        db.close()
+
+        return result
+
+    except Exception as e:
+        print("ERROR evaluate:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    main()
+# ---------------- REPORT ----------------
+
+@app.get("/get-report/{session_id}")
+def get_report(session_id: str):
+    try:
+        db = SessionLocal()
+
+        session = db.query(SessionModel).filter(
+            SessionModel.session_id == session_id
+        ).first()
+
+        if not session:
+            db.close()
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        evaluations = db.query(EvaluationModel).filter(
+            EvaluationModel.session_id == session_id
+        ).all()
+
+        db.close()
+
+        if not evaluations:
+            return {
+                "session_id": session_id,
+                "role": session.role,
+                "average_score": None,
+                "weakness_summary": [],
+                "recommendation": "No evaluations yet"
+            }
+
+        avg = round(sum(e.score for e in evaluations) / len(evaluations), 1)
+        weaknesses = list(set([e.weakness for e in evaluations if e.weakness]))
+
+        prompt = f"""
+Role: {session.role}
+Average score: {avg}
+Weaknesses: {weaknesses}
+
+Give a 2-3 sentence hiring recommendation.
+"""
+
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6
+        )
+
+        recommendation = response.choices[0].message.content.strip()
+
+        return {
+            "session_id": session_id,
+            "role": session.role,
+            "average_score": avg,
+            "weakness_summary": weaknesses,
+            "recommendation": recommendation
+        }
+
+    except Exception as e:
+        print("ERROR report:", repr(e))
+        raise HTTPException(status_code=500, detail=str(e))
