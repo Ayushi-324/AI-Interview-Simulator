@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,7 +57,7 @@ def generate_questions(req: RoleRequest):
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -122,7 +125,7 @@ def evaluate(req: AnswerRequest):
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -208,7 +211,7 @@ def report(session_id: str):
         print("Step 2: calling Groq...")
 
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
 
