@@ -1,14 +1,11 @@
-import google.generativeai as genai
+from groq import Groq
 import json
 import os
 
 # Configure API key
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Model
-model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
-
-# Storing weaknesses globally to generate final report at the end
+# Storing weaknesses globally
 weakness_list = []
 
 
@@ -25,9 +22,16 @@ def generate_questions(role):
     - No explanations
     """
 
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    text = response.choices[0].message.content.strip()
     questions = text.split("\n")
+
     return [q.strip() for q in questions if q.strip()]
 
 
@@ -50,11 +54,16 @@ def evaluate_answer(question, answer):
         "weakness": "short phrase"
     }}
     """
-    response = model.generate_content(prompt)
 
-    text = response.text.strip()
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
+    )
 
-    result = {}
+    text = response.choices[0].message.content.strip()
+
     try:
         result = json.loads(text)
     except Exception:

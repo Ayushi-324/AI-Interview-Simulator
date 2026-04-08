@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
+from groq import Groq
 import json
 import re
 import os
@@ -10,9 +10,8 @@ import os
 # Database imports
 from database import SessionLocal, SessionModel, EvaluationModel
 
-# API setup
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+# Groq setup
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI()
 
@@ -23,45 +22,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class RoleRequest(BaseModel):
     role: str
-
 
 class AnswerRequest(BaseModel):
     session_id: str
     question: str
     answer: str
 
-
 def parse_json_response(text: str) -> dict:
     cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
     return json.loads(cleaned)
-
 
 @app.get("/")
 def read_index():
     return FileResponse("index.html")
 
-
+# -------------------------------
+# GENERATE QUESTIONS
+# -------------------------------
 @app.post("/generate-questions")
 def generate_questions(req: RoleRequest):
     try:
         print("Step 1: received role:", req.role)
-        prompt = f"Generate exactly 5 interview questions for a {req.role} role. Return only the questions as a plain numbered list."
-        print("Step 2: calling Gemini...")
-        response = model.generate_content(prompt)
-        print("Step 3: Gemini response:", response.text)
 
-        raw_lines = response.text.strip().split("\n")
+        prompt = f"""
+        Generate exactly 5 interview questions for a {req.role} role.
+        Return only the questions as a plain numbered list.
+        """
+
+        print("Step 2: calling Groq...")
+
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        text = response.choices[0].message.content
+        print("Step 3: response:", text)
+
+        if not text:
+            return {"session_id": None, "questions": ["Error generating questions"]}
+
+        raw_lines = text.strip().split("\n")
+
         questions = [
             re.sub(r"^\d+[\.\)]\s*", "", line).strip()
-            for line in raw_lines
-            if line.strip()
+            for line in raw_lines if line.strip()
         ]
-        print("Step 4: questions parsed:", questions)
 
-        # Save session to database
+        print("Step 4: parsed questions:", questions)
+
+        # Save session
         db = SessionLocal()
         session_id = str(db.query(SessionModel).count() + 1)
         new_session = SessionModel(session_id=session_id, role=req.role)
@@ -69,19 +81,20 @@ def generate_questions(req: RoleRequest):
         db.commit()
         db.close()
 
-        return {"session_id": session_id, "questions": questions}
+        return {"session_id": session_id, "questions": questions[:5]}
 
     except Exception as e:
         print("ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"session_id": None, "questions": ["Server error"]}
 
-
+# -------------------------------
+# EVALUATE ANSWER
+# -------------------------------
 @app.post("/evaluate")
 def evaluate(req: AnswerRequest):
     try:
         print("Step 1: evaluating session:", req.session_id)
 
-        # Check session exists in database
         db = SessionLocal()
         session = db.query(SessionModel).filter(
             SessionModel.session_id == req.session_id
@@ -101,20 +114,34 @@ def evaluate(req: AnswerRequest):
         {{
             "score": <integer from 1 to 10>,
             "feedback": "<2-3 sentence constructive feedback>",
-            "weakness": "<short 3-5 word phrase describing the main gap, or 'none' if strong>"
+            "weakness": "<short 3-5 word phrase or 'none'>"
         }}
-        Return only the JSON object, no explanation.
+        Return only JSON.
         """
 
-        print("Step 2: calling Gemini...")
-        response = model.generate_content(prompt)
-        print("Step 3: Gemini response:", response.text)
+        print("Step 2: calling Groq...")
 
-        result = parse_json_response(response.text)
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        text = response.choices[0].message.content
+        print("Step 3: response:", text)
+
+        try:
+            result = parse_json_response(text)
+        except:
+            result = {
+                "score": 5,
+                "feedback": "Could not parse response",
+                "weakness": "unclear"
+            }
+
         print("Step 4: parsed result:", result)
 
-        # Save evaluation to database
         weakness = result.get("weakness", "none")
+
         new_eval = EvaluationModel(
             session_id=req.session_id,
             question=req.question,
@@ -122,6 +149,7 @@ def evaluate(req: AnswerRequest):
             feedback=result["feedback"],
             weakness=weakness if weakness.lower() != "none" else None
         )
+
         db.add(new_eval)
         db.commit()
         db.close()
@@ -132,17 +160,18 @@ def evaluate(req: AnswerRequest):
         raise
     except Exception as e:
         print("ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"score": 0, "feedback": "Server error", "weakness": "error"}
 
-
+# -------------------------------
+# REPORT GENERATION
+# -------------------------------
 @app.get("/get-report/{session_id}")
 def report(session_id: str):
     try:
-        print("Step 1: generating report for session:", session_id)
+        print("Step 1: generating report:", session_id)
 
         db = SessionLocal()
 
-        # Check session exists
         session = db.query(SessionModel).filter(
             SessionModel.session_id == session_id
         ).first()
@@ -151,7 +180,6 @@ def report(session_id: str):
             db.close()
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Get all evaluations for this session
         evaluations = db.query(EvaluationModel).filter(
             EvaluationModel.session_id == session_id
         ).all()
@@ -170,28 +198,38 @@ def report(session_id: str):
         weaknesses = [e.weakness for e in evaluations if e.weakness]
 
         synthesis_prompt = f"""
-        A candidate interviewed for a {session.role} role.
-        Their identified weaknesses were: {weaknesses if weaknesses else ["none"]}.
-        Their average score was {avg_score}/10.
+        Candidate role: {session.role}
+        Weaknesses: {weaknesses if weaknesses else ["none"]}
+        Average score: {avg_score}/10
 
-        Write a 2-3 sentence hiring recommendation summary.
-        Be direct and constructive.
+        Write a short hiring recommendation (2-3 sentences).
         """
 
-        print("Step 2: calling Gemini for synthesis...")
-        synthesis = model.generate_content(synthesis_prompt)
-        print("Step 3: synthesis done")
+        print("Step 2: calling Groq...")
+
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": synthesis_prompt}]
+        )
+
+        recommendation = response.choices[0].message.content
 
         return {
             "session_id": session_id,
             "role": session.role,
             "average_score": avg_score,
             "weakness_summary": list(set(weaknesses)),
-            "recommendation": synthesis.text.strip()
+            "recommendation": recommendation.strip()
         }
 
     except HTTPException:
         raise
     except Exception as e:
         print("ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "session_id": session_id,
+            "role": None,
+            "average_score": None,
+            "weakness_summary": [],
+            "recommendation": "Error generating report"
+        }
