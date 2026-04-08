@@ -14,7 +14,7 @@ An AI-powered interview preparation tool that generates role-specific interview 
 
 ## 🛠️ Tech Stack
 - **Backend:** FastAPI (Python)
-- **AI:** Google Gemini API
+- **AI:** Groq API(LLaMA3)
 - **Database:** SQLite + SQLAlchemy
 - **Frontend:** HTML, CSS, JavaScript
 - **Deployment:** Render
@@ -29,7 +29,7 @@ cd AI-Interview-Simulator
 pip install -r requirements.txt
 
 # Set your API key
-$env:GEMINI_API_KEY="gemini_api_key"
+$env:GROQ_API_KEY="your_api_key"
 
 # Run the app
 uvicorn main:app --reload
@@ -41,7 +41,7 @@ Open `http://localhost:8000` in your browser.
 
 | Variable | Description |
 |---|---|
-| `GEMINI_API_KEY` | get ur Google Gemini API key from [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `GROQ_API_KEY` | get ur Groq API key
 
 ## 📸 How It Works
 
