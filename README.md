@@ -53,11 +53,17 @@ Open `http://localhost:8000` in your browser.
 ## 📁 Project Structure
 
 AI-Interview-Simulator/
+
 ├── main.py          # FastAPI backend with all API endpoints
+
 ├── database.py      # SQLAlchemy database models
+
 ├── app.py           # CLI version of the app
+
 ├── index.html       # Frontend UI
+
 ├── requirements.txt # Python dependencies
+
 └── render.yaml      # Render deployment config
 
 
