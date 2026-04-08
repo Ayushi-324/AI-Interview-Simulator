@@ -15,7 +15,6 @@ from database import SessionLocal, SessionModel, EvaluationModel
 
 # ---------------- INIT ----------------
 
-app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
