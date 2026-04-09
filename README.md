@@ -10,7 +10,7 @@ An AI-powered interview preparation tool that generates role-specific interview 
   <h2>📸 Project Walkthrough</h2>
 
   <h3>1. Main Interface</h3>
-  <img src="Plots/Project_walkthrough.png" width="600" alt="App Interface">
+  <img src="Plots/Project_walkthrough.png" width="400" alt="App Interface">
   <p align="center"><i>The initial setup where users enter their target job role.</i></p>
 
   <br>
