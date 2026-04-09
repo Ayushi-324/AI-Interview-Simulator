@@ -22,7 +22,7 @@ An AI-powered interview preparation tool that generates role-specific interview 
   <br>
 
   <h3>3. Final Interview Report</h3>
-  <img src="Plots/Final_report.png" width="600" alt="Final Report">
+  <img src="Plots/Final_report.png" width="400" alt="Final Report">
   <p align="center"><i>A comprehensive summary with hiring recommendations and weaknesses.</i></p>
 
 </div>
