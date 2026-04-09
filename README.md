@@ -5,6 +5,28 @@ An AI-powered interview preparation tool that generates role-specific interview 
 ## 🚀 Live Demo
 **[Check out the App on Hugging Face Spaces](https://huggingface.co/spaces/ayushi3/AI-Interview-Simulator)**
 
+<div align="center">
+
+  <h2>📸 Project Walkthrough</h2>
+
+  <h3>1. Main Interface</h3>
+  <img src="Project_walkthrough.png" width="600" alt="App Interface">
+  <p align="center"><i>The initial setup where users enter their target job role.</i></p>
+
+  <br>
+
+  <h3>2. Real-Time Evaluation</h3>
+  <img src="Real_time_evaluation.png" width="600" alt="Evaluation Screen">
+  <p align="center"><i>AI provides instant scores and feedback for each response.</i></p>
+
+  <br>
+
+  <h3>3. Final Interview Report</h3>
+  <img src="Final_report.png" width="600" alt="Final Report">
+  <p align="center"><i>A comprehensive summary with hiring recommendations and weaknesses.</i></p>
+
+</div>
+
 ## 💡 Features
 - **Role-Based Generation:** Generates 5 tailored technical/behavioral questions for any job role.
 - **Instant Evaluation:** Provides a score (0-10) and constructive feedback for every answer using Groq LLaMA 3.1.
