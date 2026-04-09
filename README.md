@@ -16,7 +16,7 @@ An AI-powered interview preparation tool that generates role-specific interview 
   <br>
 
   <h3>2. Real-Time Evaluation</h3>
-  <img src="Plots/Real_time_evaluation.png" width="600" alt="Evaluation Screen">
+  <img src="Plots/Real_time_evaluation.png" width="400" alt="Evaluation Screen">
   <p align="center"><i>AI provides instant scores and feedback for each response.</i></p>
 
   <br>
