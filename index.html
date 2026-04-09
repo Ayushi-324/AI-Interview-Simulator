@@ -10,7 +10,6 @@
             box-sizing: border-box;
             font-family: 'Segoe UI', sans-serif;
         }
-
         body {
             background: #f0f4f8;
             display: flex;
@@ -18,7 +17,6 @@
             align-items: center;
             min-height: 100vh;
         }
-
         .card {
             background: white;
             padding: 40px;
@@ -27,24 +25,20 @@
             width: 100%;
             max-width: 600px;
         }
-
         h1 {
             font-size: 28px;
             color: #1a202c;
             margin-bottom: 8px;
         }
-
         h2 {
             font-size: 22px;
             color: #1a202c;
             margin-bottom: 20px;
         }
-
         p {
             color: #4a5568;
             margin-bottom: 24px;
         }
-
         input, textarea {
             width: 100%;
             padding: 12px 16px;
@@ -55,16 +49,13 @@
             outline: none;
             transition: border 0.2s;
         }
-
         input:focus, textarea:focus {
             border-color: #667eea;
         }
-
         textarea {
             height: 150px;
             resize: none;
         }
-
         button {
             width: 100%;
             padding: 14px;
@@ -76,30 +67,25 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-
         button:hover {
             background: #5a67d8;
         }
-
         .counter {
             text-align: center;
             margin-top: 12px;
             color: #a0aec0;
             font-size: 14px;
         }
-
         .report-item {
             background: #f7fafc;
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
         }
-
         .report-item span {
             font-weight: bold;
             color: #1a202c;
         }
-
         .score {
             font-size: 48px;
             font-weight: bold;
@@ -107,7 +93,6 @@
             text-align: center;
             margin: 16px 0;
         }
-
         .feedback-box {
             background: #ebf8ff;
             border-left: 4px solid #667eea;
@@ -116,7 +101,6 @@
             margin-bottom: 16px;
             display: none;
         }
-
         .feedback-box p {
             margin: 0;
             color: #2d3748;
@@ -125,7 +109,6 @@
 </head>
 <body>
 
-    <!-- SCREEN 1: Enter job role -->
     <div id="screen-role" class="card">
         <h1>🎯 AI Interview Prep</h1>
         <p>Enter a job role to generate interview questions</p>
@@ -133,7 +116,6 @@
         <button onclick="generateQuestions()">Start Interview →</button>
     </div>
 
-    <!-- SCREEN 2: Answer questions -->
     <div id="screen-questions" class="card" style="display:none;">
         <p class="counter" id="question-counter"></p>
         <h2 id="question-text"></h2>
@@ -144,7 +126,6 @@
         <button id="submit-btn" onclick="submitAnswer()">Submit Answer →</button>
     </div>
 
-    <!-- SCREEN 3: Show report -->
     <div id="screen-report" class="card" style="display:none;">
         <h2>📊 Your Interview Report</h2>
         <div class="score" id="report-score"></div>
@@ -155,50 +136,39 @@
     </div>
 
     <script>
-        const API = 'https://ai-interview-simulator-569n.onrender.com';
-
+        // Use window.location.origin to talk to your own backend automatically
+        const API = window.location.origin;
         let sessionId = null;
         let questions = [];
         let currentIndex = 0;
-
         async function generateQuestions() {
             const role = document.getElementById('role-input').value.trim();
-
             if (!role) {
                 alert('Please enter a job role!');
                 return;
             }
-
             const btn = document.getElementById('screen-role').querySelector('button');
             btn.innerText = 'Generating...';
             btn.disabled = true;
-
             try {
                 const response = await fetch(`${API}/generate-questions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ role: role })
                 });
-
                 const data = await response.json();
-
                 sessionId = data.session_id;
-
                 if (!data.questions || data.questions.length === 0) {
-                    alert('No questions returned. Check console.');
+                    alert('No questions returned.');
                     btn.innerText = 'Start Interview →';
                     btn.disabled = false;
                     return;
                 }
-
                 questions = data.questions.filter(q => q && q.trim() !== '');
                 currentIndex = 0;
-
                 document.getElementById('screen-role').style.display = 'none';
                 document.getElementById('screen-questions').style.display = 'block';
-
                 showQuestion();
-
             } catch (err) {
                 console.error("Error:", err);
                 alert('Something went wrong: ' + err.message);
@@ -206,29 +176,25 @@
                 btn.disabled = false;
             }
         }
-
         function showQuestion() {
             document.getElementById('question-text').innerText = questions[currentIndex];
             document.getElementById('answer-input').value = '';
             document.getElementById('question-counter').innerText = `Question ${currentIndex + 1} of ${questions.length}`;
             document.getElementById('feedback-box').style.display = 'none';
-            document.getElementById('submit-btn').innerText = 'Submit Answer →';
-            document.getElementById('submit-btn').disabled = false;
-            document.getElementById('submit-btn').onclick = submitAnswer;
+            const btn = document.getElementById('submit-btn');
+            btn.innerText = 'Submit Answer →';
+            btn.disabled = false;
+            btn.onclick = submitAnswer;
         }
-
         async function submitAnswer() {
             const answer = document.getElementById('answer-input').value.trim();
-
             if (!answer) {
                 alert('Please type an answer!');
                 return;
             }
-
             const btn = document.getElementById('submit-btn');
             btn.innerText = 'Evaluating...';
             btn.disabled = true;
-
             try {
                 const response = await fetch(`${API}/evaluate`, {
                     method: 'POST',
@@ -239,14 +205,10 @@
                         answer: answer
                     })
                 });
-
                 const data = await response.json();
-
                 document.getElementById('feedback-text').innerText = `Score: ${data.score}/10 — ${data.feedback}`;
                 document.getElementById('feedback-box').style.display = 'block';
-
                 currentIndex++;
-
                 if (currentIndex < questions.length) {
                     btn.innerText = 'Next Question →';
                     btn.disabled = false;
@@ -256,7 +218,6 @@
                     btn.disabled = false;
                     btn.onclick = getReport;
                 }
-
             } catch (err) {
                 console.error("Error:", err);
                 alert('Something went wrong: ' + err.message);
@@ -264,24 +225,19 @@
                 btn.disabled = false;
             }
         }
-
         async function getReport() {
             const btn = document.getElementById('submit-btn');
             btn.innerText = 'Loading Report...';
             btn.disabled = true;
-
             try {
                 const response = await fetch(`${API}/get-report/${sessionId}`);
                 const data = await response.json();
-
                 document.getElementById('screen-questions').style.display = 'none';
                 document.getElementById('screen-report').style.display = 'block';
-
                 document.getElementById('report-score').innerText = `${data.average_score} / 10`;
                 document.getElementById('report-role').innerText = data.role;
                 document.getElementById('report-weaknesses').innerText = data.weakness_summary.join(', ') || 'None';
                 document.getElementById('report-recommendation').innerText = data.recommendation;
-
             } catch (err) {
                 console.error("Error:", err);
                 alert('Something went wrong loading report: ' + err.message);

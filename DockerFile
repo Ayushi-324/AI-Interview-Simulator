@@ -1,0 +1,15 @@
+# Use Python 3.10
+FROM python:3.10
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy everything else (main.py, index.html) into the container
+COPY . .
+
+# Run the app on port 7860 (Hugging Face's required port)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]

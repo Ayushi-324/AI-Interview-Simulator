@@ -1,38 +1,38 @@
 # 🎯 AI Interview Simulator
 
-An AI-powered interview preparation tool that generates role-specific interview questions, evaluates your answers in real-time, and provides a detailed performance report.
+An AI-powered interview preparation tool that generates role-specific interview questions using **LLaMA 3**, evaluates your answers in real-time, and provides a detailed performance report.
 
 ## 🚀 Live Demo
-[https://ai-interview-simulator-569n.onrender.com](https://ai-interview-simulator-569n.onrender.com)
+**[Check out the App on Hugging Face Spaces](https://huggingface.co/spaces/ayushi3/AI-Interview-Simulator)**
 
 ## 💡 Features
-- Generate 5 tailored interview questions for any job role
-- Real-time answer evaluation with score and feedback
-- Weakness identification per answer
-- Final report with average score and hiring recommendation
-- Data persistence with SQLite database
+- **Role-Based Generation:** Generates 5 tailored technical/behavioral questions for any job role.
+- **Instant Evaluation:** Provides a score (0-10) and constructive feedback for every answer using Groq LLaMA 3.1.
+- **Deep Insights:** Identifies specific weaknesses in your responses to help you improve.
+- **Hiring Report:** Summarizes performance with an average score and a final AI hiring recommendation.
+- **Dockerized Architecture:** Frontend and Backend are bundled into a single container for zero-latency communication and easy deployment.
 
 ## 🛠️ Tech Stack
 - **Backend:** FastAPI (Python)
-- **AI:** Groq API(LLaMA3)
+- **AI Engine:** Groq API (LLaMA 3.1 8b-instant)
 - **Database:** SQLite + SQLAlchemy
-- **Frontend:** HTML, CSS, JavaScript
-- **Deployment:** Render
+- **Frontend:** Vanilla JavaScript, HTML5, CSS3
+- **Deployment:** Docker on Hugging Face Spaces
 
-## 📦 Installation
+## 📦 Local Installation
 ```bash
 # Clone the repo
-git clone https://github.com/Ayushi-324/AI-Interview-Simulator.git
+git clone [https://github.com/Ayushi-324/AI-Interview-Simulator.git](https://github.com/Ayushi-324/AI-Interview-Simulator.git)
 cd AI-Interview-Simulator
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Set your API key
-$env:GROQ_API_KEY="your_api_key"
+# Set your Groq API key (Example for Windows PowerShell)
+$env:GROQ_API_KEY="your_api_key_here"
 
-# Run the app
-uvicorn main:app --reload
+# Run the app locally
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 Open `http://localhost:8000` in your browser.
@@ -41,7 +41,7 @@ Open `http://localhost:8000` in your browser.
 
 | Variable | Description |
 |---|---|
-| `GROQ_API_KEY` | get ur Groq API key
+| `GROQ_API_KEY` | get ur Groq API key from the Groq Console.
 
 ## 📸 How It Works
 
@@ -53,19 +53,11 @@ Open `http://localhost:8000` in your browser.
 ## 📁 Project Structure
 
 AI-Interview-Simulator/
-
-├── main.py          # FastAPI backend with all API endpoints
-
-├── database.py      # SQLAlchemy database models
-
-├── app.py           # CLI version of the app
-
-├── index.html       # Frontend UI
-
-├── requirements.txt # Python dependencies
-
-└── render.yaml      # Render deployment config
-
+├── main.py          # Unified FastAPI backend, Database logic & Routes
+├── index.html       # Single-page Frontend UI
+├── requirements.txt # Python dependencies (fastapi, httpx, sqlalchemy, etc.)
+├── Dockerfile       # Deployment instructions for Hugging Face
+└── README.md        # Project documentation
 
 ## 🌐 API Endpoints
 
